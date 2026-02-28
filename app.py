@@ -9,7 +9,16 @@ from docx.shared import Pt
 import fitz
 from fpdf import FPDF
 import io
-
+# --- TEMİZLİK OPERASYONU (UI GİZLEME) ---
+hide_st_style = """
+            <style>
+            #MainMenu {visibility: hidden;}
+            footer {visibility: hidden;}
+            header {visibility: hidden;}
+            .viewerBadge_container__1QS1Y {display: none;}
+            </style>
+            """
+st.markdown(hide_st_style, unsafe_allow_html=True)
 # --- SAYFA AYARLARI ---
 st.set_page_config(page_title="VEX | Profesyonel Hukuk Dönüştürücü", page_icon="⚖️")
 
