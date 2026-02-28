@@ -16,7 +16,7 @@ st.set_page_config(page_title="VEX | Profesyonel Hukuk Dönüştürücü", page_
 st.title("⚖️ VEX: Master Architect")
 st.markdown("---")
 
-# --- FONT TANIMLAMALARI (GitHub'a yüklediğin isimlerle birebir aynı) ---
+# --- FONT TANIMLAMALARI ---
 FONT_REG = "Roboto-Regular.ttf"
 FONT_BOLD = "Roboto-Bold.ttf"
 FONT_ITAL = "Roboto-Italic.ttf"
@@ -24,7 +24,6 @@ FONT_ITAL = "Roboto-Italic.ttf"
 class VexWebApp:
     @staticmethod
     def decode_text(data):
-        """Türkçe karakter kodlamalarını sırayla dener."""
         for encoding in ['utf-8', 'windows-1254', 'iso-8859-9', 'cp1254']:
             try: return data.decode(encoding)
             except: continue
@@ -32,13 +31,12 @@ class VexWebApp:
 
     @staticmethod
     def extract_udf_data(raw_xml):
-        """UDF içindeki şablonları (il_Ilce) atlayıp gerçek verileri ve boşlukları korur."""
+        """Veri çekme ve boşluk koruma motoru [cite: 32-36]."""
         text = html.unescape(raw_xml)
         cdata_text = ""
         if "<![CDATA[" in text:
             cdata_text = text.split("<![CDATA[")[1].split("]]>")[0]
         
-        # Şablon kontrolü: Eğer CDATA boşsa veya sadece etiket içeriyorsa derin tarama yap
         if not cdata_text.strip() or "il_Ilce" in cdata_text[:100]:
             deep_text = re.sub(r'<[^>]+>', '\n', text) 
             deep_text = re.sub(r'\n\s*\n', '\n\n', deep_text)
@@ -47,12 +45,12 @@ class VexWebApp:
 
     @staticmethod
     def save_pdf_pro(content):
-        """Roboto font ailesini kullanan, Türkçe karakter ve düzen garantili PDF motoru."""
+        """AttributeError hatası giderilmiş, fpdf2 uyumlu PDF motoru."""
         pdf = FPDF()
         pdf.add_page()
         pdf.set_margins(20, 15, 20)
         
-        # Font Yükleme
+        # Font Yükleme Mantığı
         try:
             if os.path.exists(FONT_REG):
                 pdf.add_font('Roboto', '', FONT_REG)
@@ -67,15 +65,17 @@ class VexWebApp:
         wrapper = textwrap.TextWrapper(width=80, break_long_words=True, replace_whitespace=False)
         for line in content.split('\n'):
             if not line.strip():
-                pdf.ln(7) # Paragraf boşluğunu koru
+                pdf.ln(7) # Satır boşluklarını koru
             else:
                 for s_line in wrapper.wrap(line):
                     pdf.cell(0, 6, text=s_line, ln=1, align='L')
-        return pdf.output(dest='S').encode('latin-1', 'replace')
+        
+        # --- KRİTİK DÜZELTME ---
+        # fpdf2'de output() doğrudan bytes döndürür, .encode() gerekmez.
+        return bytes(pdf.output())
 
     @staticmethod
     def save_udf_pro(content):
-        """UYAP DNA şablonuna göre her satırı ayrı bir paragraf etiketiyle kodlar."""
         lines = content.split('\n')
         p_xml, offset = "", 0
         for l in lines:
@@ -96,21 +96,15 @@ class VexWebApp:
 
     @staticmethod
     def save_docx_pro(content):
-        """Paragraf düzenini ve Türkçe karakterleri koruyan Word motoru."""
         doc = Document()
-        style = doc.styles['Normal']
-        style.font.name = 'Arial'
-        style.font.size = Pt(11)
-
         for line in content.split('\n'):
             doc.add_paragraph(line)
-        
         doc_io = io.BytesIO()
         doc.save(doc_io)
         return doc_io.getvalue()
 
 # --- ARAYÜZ MANTIĞI ---
-uploaded_files = st.file_uploader("Dosyalarınızı buraya sürükleyin (PDF, UDF, Word, TXT)", accept_multiple_files=True)
+uploaded_files = st.file_uploader("Dosyaları yükleyin", accept_multiple_files=True)
 
 if uploaded_files:
     vex_files = []
@@ -135,38 +129,20 @@ if uploaded_files:
             
             vex_files.append({"name": uploaded_file.name, "content": text})
         except Exception as e:
-            st.error(f"{uploaded_file.name} işlenirken hata oluştu: {e}")
+            st.error(f"Hata: {e}")
 
     if vex_files:
-        st.success(f"{len(vex_files)} dosya hazır.")
-        
-        mode = "Ayrı Ayrı Dönüştür"
-        if len(vex_files) > 1:
-            mode = st.radio("İşlem Modu", ["Ayrı Ayrı Dönüştür", "Hepsini Birleştir"])
-        
-        target_format = st.selectbox("Çıktı Formatı", ["PDF", "UDF", "DOCX", "TXT"])
+        st.success(f"{len(vex_files)} dosya yüklendi.")
+        target_format = st.selectbox("Format Seçin", ["PDF", "UDF", "DOCX", "TXT"])
 
         if st.button("Dönüştür ve İndir"):
-            if mode == "Hepsini Birleştir":
-                combined_text = "\n\n".join([f"=== DOSYA: {f['name']} ===\n\n{f['content']}" for f in vex_files])
-                
+            for f in vex_files:
                 if target_format == "PDF":
-                    data = VexWebApp.save_pdf_pro(combined_text)
-                    st.download_button("📂 Birleşik PDF İndir", data, "VEX_BIRLESIK.pdf")
+                    data = VexWebApp.save_pdf_pro(f['content'])
+                    st.download_button(f"📥 {f['name']} (PDF)", data, f"VEX_{f['name'][:2]}.pdf")
                 elif target_format == "UDF":
-                    data = VexWebApp.save_udf_pro(combined_text)
-                    st.download_button("📂 Birleşik UDF İndir", data, "VEX_BIRLESIK.udf")
+                    data = VexWebApp.save_udf_pro(f['content'])
+                    st.download_button(f"📥 {f['name']} (UDF)", data, f"VEX_{f['name'][:2]}.udf")
                 elif target_format == "DOCX":
-                    data = VexWebApp.save_docx_pro(combined_text)
-                    st.download_button("📂 Birleşik DOCX İndir", data, "VEX_BIRLESIK.docx")
-            else:
-                for f in vex_files:
-                    if target_format == "PDF":
-                        data = VexWebApp.save_pdf_pro(f['content'])
-                        st.download_button(f"📥 {f['name']} (PDF)", data, f"VEX_{f['name'][:2]}.pdf")
-                    elif target_format == "UDF":
-                        data = VexWebApp.save_udf_pro(f['content'])
-                        st.download_button(f"📥 {f['name']} (UDF)", data, f"VEX_{f['name'][:2]}.udf")
-                    elif target_format == "DOCX":
-                        data = VexWebApp.save_docx_pro(f['content'])
-                        st.download_button(f"📥 {f['name']} (DOCX)", data, f"VEX_{f['name'][:2]}.docx")
+                    data = VexWebApp.save_docx_pro(f['content'])
+                    st.download_button(f"📥 {f['name']} (DOCX)", data, f"VEX_{f['name'][:2]}.docx")
